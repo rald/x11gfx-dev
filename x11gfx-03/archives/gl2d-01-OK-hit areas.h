@@ -40,18 +40,18 @@ int gl2d_poll_events(FastCanvas *canvas, MouseState *mouse);
 void gl2d_set_input_region(FastCanvas *canvas, int x, int y, int w, int h, int enabled);
 void gl2d_set_input_regions(FastCanvas *canvas, XRectangle *rects, int nrects, int enabled);
 
-static inline void pset(FastCanvas *canvas, int x, int y, unsigned long color);
-static inline unsigned long pget(FastCanvas *canvas, int x, int y);
-static inline void cls(FastCanvas *canvas, unsigned long color);
-static inline void line(FastCanvas *canvas, int x0, int y0, int x1, int y1, unsigned long color);
-static inline void rect(FastCanvas *canvas, int x, int y, int w, int h, unsigned long color);
-static inline void frect(FastCanvas *canvas, int x, int y, int w, int h, unsigned long color);
-static inline void circ(FastCanvas *canvas, int xc, int yc, int r, unsigned long color);
-static inline void fcirc(FastCanvas *canvas, int xc, int yc, int r, unsigned long color);
+static inline void fast_pset(FastCanvas *canvas, int x, int y, unsigned long color);
+static inline unsigned long fast_pget(FastCanvas *canvas, int x, int y);
+static inline void fast_cls(FastCanvas *canvas, unsigned long color);
+static inline void fast_line(FastCanvas *canvas, int x0, int y0, int x1, int y1, unsigned long color);
+static inline void fast_rect(FastCanvas *canvas, int x, int y, int w, int h, unsigned long color);
+static inline void fast_filled_rect(FastCanvas *canvas, int x, int y, int w, int h, unsigned long color);
+static inline void fast_circle(FastCanvas *canvas, int xc, int yc, int r, unsigned long color);
+static inline void fast_filled_circle(FastCanvas *canvas, int xc, int yc, int r, unsigned long color);
 
 // Collision Helper Prototypes
-static inline int inrect(int px, int py, int rx, int ry, int rw, int rh);
-static inline int incirc(int px, int py, int cx, int cy, int r);
+static inline int gl2d_inrect(int px, int py, int rx, int ry, int rw, int rh);
+static inline int gl2d_incirc(int px, int py, int cx, int cy, int r);
 
 #ifdef GL2D_IMPLEMENTATION
 
@@ -189,14 +189,14 @@ void gl2d_quit(FastCanvas *canvas) {
     }
 }
 
-static inline void pset(FastCanvas *canvas, int x, int y, unsigned long color) {
+static inline void fast_pset(FastCanvas *canvas, int x, int y, unsigned long color) {
     if (x >= 0 && x < canvas->width && y >= 0 && y < canvas->height) {
         uint8_t *pixel_addr = canvas->data + (y * canvas->stride) + (x * canvas->bpp);
         *(uint32_t *)pixel_addr = (uint32_t)color;
     }
 }
 
-static inline unsigned long pget(FastCanvas *canvas, int x, int y) {
+static inline unsigned long fast_pget(FastCanvas *canvas, int x, int y) {
     if (x >= 0 && x < canvas->width && y >= 0 && y < canvas->height) {
         uint8_t *pixel_addr = canvas->data + (y * canvas->stride) + (x * canvas->bpp);
         return (unsigned long)(*(uint32_t *)pixel_addr);
@@ -204,7 +204,7 @@ static inline unsigned long pget(FastCanvas *canvas, int x, int y) {
     return 0;
 }
 
-static inline void cls(FastCanvas *canvas, unsigned long color) {
+static inline void fast_cls(FastCanvas *canvas, unsigned long color) {
     uint32_t *buffer = (uint32_t *)canvas->data;
     int total_pixels = canvas->width * canvas->height;
     for (int i = 0; i < total_pixels; i++) {
@@ -212,7 +212,7 @@ static inline void cls(FastCanvas *canvas, unsigned long color) {
     }
 }
 
-static inline void line(FastCanvas *canvas, int x0, int y0, int x1, int y1, unsigned long color) {
+static inline void fast_line(FastCanvas *canvas, int x0, int y0, int x1, int y1, unsigned long color) {
     int dx = abs(x1 - x0);
     int dy = abs(y1 - y0);
     int sx = (x0 < x1) ? 1 : -1;
@@ -220,7 +220,7 @@ static inline void line(FastCanvas *canvas, int x0, int y0, int x1, int y1, unsi
     int err = dx - dy;
 
     while (1) {
-        pset(canvas, x0, y0, color);
+        fast_pset(canvas, x0, y0, color);
         if (x0 == x1 && y0 == y1) break;
         int e2 = 2 * err;
         if (e2 > -dy) {
@@ -234,39 +234,39 @@ static inline void line(FastCanvas *canvas, int x0, int y0, int x1, int y1, unsi
     }
 }
 
-static inline void rect(FastCanvas *canvas, int x, int y, int w, int h, unsigned long color) {
+static inline void fast_rect(FastCanvas *canvas, int x, int y, int w, int h, unsigned long color) {
     int x1 = x + w - 1;
     int y1 = y + h - 1;
-    line(canvas, x, y, x1, y, color);       
-    line(canvas, x, y1, x1, y1, color);    
-    line(canvas, x, y, x, y1, color);       
-    line(canvas, x1, y, x1, y1, color);    
+    fast_line(canvas, x, y, x1, y, color);       
+    fast_line(canvas, x, y1, x1, y1, color);    
+    fast_line(canvas, x, y, x, y1, color);       
+    fast_line(canvas, x1, y, x1, y1, color);    
 }
 
-static inline void frect(FastCanvas *canvas, int x, int y, int w, int h, unsigned long color) {
+static inline void fast_filled_rect(FastCanvas *canvas, int x, int y, int w, int h, unsigned long color) {
     int x_end = x + w;
     int y_end = y + h;
     
     for (int cy = y; cy < y_end; cy++) {
         for (int cx = x; cx < x_end; cx++) {
-            pset(canvas, cx, cy, color);
+            fast_pset(canvas, cx, cy, color);
         }
     }
 }
 
 #define PLOT_OCTANTS(canvas, cx, cy, px, py, col) \
     do { \
-        pset(canvas, (cx)+(px), (cy)+(py), col); \
-        pset(canvas, (cx)-(px), (cy)+(py), col); \
-        pset(canvas, (cx)+(px), (cy)-(py), col); \
-        pset(canvas, (cx)-(px), (cy)-(py), col); \
-        pset(canvas, (cx)+(py), (cy)+(px), col); \
-        pset(canvas, (cx)-(py), (cy)+(px), col); \
-        pset(canvas, (cx)+(py), (cy)-(px), col); \
-        pset(canvas, (cx)-(py), (cy)-(px), col); \
+        fast_pset(canvas, (cx)+(px), (cy)+(py), col); \
+        fast_pset(canvas, (cx)-(px), (cy)+(py), col); \
+        fast_pset(canvas, (cx)+(px), (cy)-(py), col); \
+        fast_pset(canvas, (cx)-(px), (cy)-(py), col); \
+        fast_pset(canvas, (cx)+(py), (cy)+(px), col); \
+        fast_pset(canvas, (cx)-(py), (cy)+(px), col); \
+        fast_pset(canvas, (cx)+(py), (cy)-(px), col); \
+        fast_pset(canvas, (cx)-(py), (cy)-(px), col); \
     } while(0)
 
-static inline void circ(FastCanvas *canvas, int xc, int yc, int r, unsigned long color) {
+static inline void fast_circle(FastCanvas *canvas, int xc, int yc, int r, unsigned long color) {
     int x = 0;
     int y = r;
     int d = 3 - 2 * r;
@@ -285,24 +285,24 @@ static inline void circ(FastCanvas *canvas, int xc, int yc, int r, unsigned long
     }
 }
 
-static inline void fcirc(FastCanvas *canvas, int xc, int yc, int r, unsigned long color) {
+static inline void fast_filled_circle(FastCanvas *canvas, int xc, int yc, int r, unsigned long color) {
     int r2 = r * r;
     for (int y = yc - r; y <= yc + r; y++) {
         for (int x = xc - r; x <= xc + r; x++) {
             int dx = x - xc;
             int dy = y - yc;
             if (dx * dx + dy * dy <= r2) {
-                pset(canvas, x, y, color);
+                fast_pset(canvas, x, y, color);
             }
         }
     }
 }
 
-static inline int inrect(int px, int py, int rx, int ry, int rw, int rh) {
+static inline int gl2d_inrect(int px, int py, int rx, int ry, int rw, int rh) {
     return (px >= rx && px <= rx + rw && py >= ry && py <= ry + rh);
 }
 
-static inline int incirc(int px, int py, int cx, int cy, int r) {
+static inline int gl2d_incirc(int px, int py, int cx, int cy, int r) {
     int dx = px - cx;
     int dy = py - cy;
     return (dx * dx + dy * dy <= r * r);
