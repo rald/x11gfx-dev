@@ -24,20 +24,26 @@ int main() {
     while (running) {
         gl2d_poll_events(&canvas, &mouse);
 
-        // Enable input region specifically over the interactive rectangle bounds
-        // (Allows clicking through the rest of the transparent screen to background windows)
-        gl2d_set_input_region(&canvas, rect_x, rect_y, rect_w, rect_h, 1);
+        // Define multiple input regions so both the rectangle and circle catch mouse clicks
+        XRectangle interactive_areas[] = {
+            { (short)rect_x, (short)rect_y, (unsigned short)rect_w, (unsigned short)rect_h },
+            { (short)(circle_cx - circle_r), (short)(circle_cy - circle_r), (unsigned short)(circle_r * 2), (unsigned short)(circle_r * 2) }
+        };
+
+        // Enable both interactive regions simultaneously
+        gl2d_set_input_regions(&canvas, interactive_areas, 2, 1);
 
         if (mouse.left_button) {
             if (gl2d_inrect(mouse.x, mouse.y, rect_x, rect_y, rect_w, rect_h)) {
-                rect_clicked = !rect_clicked;
+                rect_clicked = 1;
             }
 
             if (gl2d_incirc(mouse.x, mouse.y, circle_cx, circle_cy, circle_r)) {
-                circle_clicked = !circle_clicked;
+                circle_clicked = 1;
             }
-            
-            usleep(150000); // Debounce
+        } else {
+            rect_clicked = 0;
+            circle_clicked = 0;          
         }
 
         fast_cls(&canvas, 0x00000000);
@@ -55,7 +61,7 @@ int main() {
         fast_filled_rect(&canvas, rect_x, rect_y, rect_w, rect_h, rect_color);       
         fast_rect(&canvas, rect_x, rect_y, rect_w, rect_h, 0xFFFFFFFF);             
 
-        unsigned long circle_color = circle_clicked ? 0xFF00FFFF : 0xFFFF8800; 
+        unsigned long circle_color = circle_clicked ? 0xFFFF00FF : 0xFF00FF00;
         fast_filled_circle(&canvas, circle_cx, circle_cy, circle_r, circle_color);
         fast_circle(&canvas, circle_cx, circle_cy, circle_r, 0xFFFFFFFF);
 

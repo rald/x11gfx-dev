@@ -38,6 +38,7 @@ void gl2d_update(FastCanvas *canvas);
 void gl2d_quit(FastCanvas *canvas);
 int gl2d_poll_events(FastCanvas *canvas, MouseState *mouse);
 void gl2d_set_input_region(FastCanvas *canvas, int x, int y, int w, int h, int enabled);
+void gl2d_set_input_regions(FastCanvas *canvas, XRectangle *rects, int nrects, int enabled);
 
 static inline void fast_pset(FastCanvas *canvas, int x, int y, unsigned long color);
 static inline unsigned long fast_pget(FastCanvas *canvas, int x, int y);
@@ -168,6 +169,13 @@ void gl2d_set_input_region(FastCanvas *canvas, int x, int y, int w, int h, int e
         rect.x = 0; rect.y = 0; rect.width = 0; rect.height = 0;
     }
     XserverRegion region = XFixesCreateRegion(canvas->display, &rect, enabled ? 1 : 0);
+    XFixesSetWindowShapeRegion(canvas->display, canvas->win, ShapeInput, 0, 0, region);
+    XFixesDestroyRegion(canvas->display, region);
+}
+
+// GL2D SET INPUT REGIONS: Support multiple interactive XRectangles simultaneously
+void gl2d_set_input_regions(FastCanvas *canvas, XRectangle *rects, int nrects, int enabled) {
+    XserverRegion region = XFixesCreateRegion(canvas->display, rects, enabled ? nrects : 0);
     XFixesSetWindowShapeRegion(canvas->display, canvas->win, ShapeInput, 0, 0, region);
     XFixesDestroyRegion(canvas->display, region);
 }
