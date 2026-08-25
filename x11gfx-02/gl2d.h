@@ -24,20 +24,10 @@ typedef struct {
     int stride;
 } FastCanvas;
 
-// Mouse State Tracker
-typedef struct {
-    int x, y;
-    int left_button;
-    int right_button;
-    int middle_button;
-} MouseState;
-
 // Function Prototypes
-int gl2d_init(FastCanvas *canvas);
+int gl2d_start(FastCanvas *canvas);
 void gl2d_update(FastCanvas *canvas);
 void gl2d_quit(FastCanvas *canvas);
-int gl2d_poll_events(FastCanvas *canvas, MouseState *mouse);
-void gl2d_set_input_region(FastCanvas *canvas, int x, int y, int w, int h, int enabled);
 
 static inline void fast_pset(FastCanvas *canvas, int x, int y, unsigned long color);
 static inline unsigned long fast_pget(FastCanvas *canvas, int x, int y);
@@ -48,14 +38,10 @@ static inline void fast_filled_rect(FastCanvas *canvas, int x, int y, int w, int
 static inline void fast_circle(FastCanvas *canvas, int xc, int yc, int r, unsigned long color);
 static inline void fast_filled_circle(FastCanvas *canvas, int xc, int yc, int r, unsigned long color);
 
-// Collision Helper Prototypes
-static inline int gl2d_inrect(int px, int py, int rx, int ry, int rw, int rh);
-static inline int gl2d_incirc(int px, int py, int cx, int cy, int r);
-
 #ifdef GL2D_IMPLEMENTATION
 
-// GL2D INIT: Initialize Display, 32-bit Transparent Window, XImage, and Canvas Context
-int gl2d_init(FastCanvas *canvas) {
+// GL2D START: Initialize Display, 32-bit Transparent Window, XImage, and Canvas Context
+int gl2d_start(FastCanvas *canvas) {
     canvas->display = XOpenDisplay(NULL);
     if (!canvas->display) {
         fprintf(stderr, "Cannot open display\n");
@@ -67,6 +53,7 @@ int gl2d_init(FastCanvas *canvas) {
     canvas->width = DisplayWidth(canvas->display, screen);
     canvas->height = DisplayHeight(canvas->display, screen);
 
+    // 1. Match a 32-bit visual to support transparency (ARGB)
     XVisualInfo vinfo;
     if (!XMatchVisualInfo(canvas->display, screen, 32, TrueColor, &vinfo)) {
         fprintf(stderr, "No 32-bit visual found! Transparency won't work.\n");
@@ -74,31 +61,32 @@ int gl2d_init(FastCanvas *canvas) {
         return 0;
     }
 
+    // 2. Set up window attributes
     XSetWindowAttributes attrs;
     attrs.colormap = XCreateColormap(canvas->display, root, vinfo.visual, AllocNone);
     attrs.background_pixel = 0; 
     attrs.border_pixel = 0;
     attrs.override_redirect = True; 
-    attrs.event_mask = PointerMotionMask | ButtonPressMask | ButtonReleaseMask | ExposureMask | StructureNotifyMask;
 
     canvas->win = XCreateWindow(
         canvas->display, root, 
         0, 0, canvas->width, canvas->height, 0, 
         vinfo.depth, InputOutput, vinfo.visual, 
-        CWColormap | CWBackPixel | CWBorderPixel | CWOverrideRedirect | CWEventMask, &attrs
+        CWColormap | CWBackPixel | CWBorderPixel | CWOverrideRedirect, &attrs
     );
 
-    // Default: Make the window click-through so background windows/desktop work normally
-    XRectangle rect = {0, 0, 0, 0};
-    XserverRegion region = XFixesCreateRegion(canvas->display, &rect, 0);
+    // 3. Make the window click-through using XFixes
+    XRectangle rect;
+    XserverRegion region = XFixesCreateRegion(canvas->display, &rect, 1);
     XFixesSetWindowShapeRegion(canvas->display, canvas->win, ShapeInput, 0, 0, region);
     XFixesDestroyRegion(canvas->display, region);
 
     XMapWindow(canvas->display, canvas->win);
-    XRaiseWindow(canvas->display, canvas->win);
 
+    // Create a custom GC matching our 32-bit window depth
     canvas->gc = XCreateGC(canvas->display, canvas->win, 0, NULL);
 
+    // 4. Create an XImage buffer explicitly matching the 32-bit visual and depth
     canvas->img = XCreateImage(
         canvas->display, 
         vinfo.visual, 
@@ -125,51 +113,10 @@ int gl2d_init(FastCanvas *canvas) {
     return 1;
 }
 
-// GL2D UPDATE: Push frame buffer to screen overlay
+// GL2D UPDATE: Push the frame buffer to the screen overlay
 void gl2d_update(FastCanvas *canvas) {
     XPutImage(canvas->display, canvas->win, canvas->gc, canvas->img, 0, 0, 0, 0, canvas->width, canvas->height);
     XFlush(canvas->display);
-}
-
-// GL2D POLL EVENTS: Non-blocking event loop handler for mouse movement and clicks
-int gl2d_poll_events(FastCanvas *canvas, MouseState *mouse) {
-    XEvent event;
-    while (XPending(canvas->display) > 0) {
-        XNextEvent(canvas->display, &event);
-        switch (event.type) {
-            case MotionNotify:
-                mouse->x = event.xmotion.x;
-                mouse->y = event.xmotion.y;
-                break;
-            case ButtonPress:
-                if (event.xbutton.button == Button1) mouse->left_button = 1;
-                if (event.xbutton.button == Button2) mouse->middle_button = 1;
-                if (event.xbutton.button == Button3) mouse->right_button = 1;
-                break;
-            case ButtonRelease:
-                if (event.xbutton.button == Button1) mouse->left_button = 0;
-                if (event.xbutton.button == Button2) mouse->middle_button = 0;
-                if (event.xbutton.button == Button3) mouse->right_button = 0;
-                break;
-        }
-    }
-    return 1;
-}
-
-// GL2D SET INPUT REGION: Selectively enable/disable input catching for background click-through
-void gl2d_set_input_region(FastCanvas *canvas, int x, int y, int w, int h, int enabled) {
-    XRectangle rect;
-    if (enabled) {
-        rect.x = x;
-        rect.y = y;
-        rect.width = w;
-        rect.height = h;
-    } else {
-        rect.x = 0; rect.y = 0; rect.width = 0; rect.height = 0;
-    }
-    XserverRegion region = XFixesCreateRegion(canvas->display, &rect, enabled ? 1 : 0);
-    XFixesSetWindowShapeRegion(canvas->display, canvas->win, ShapeInput, 0, 0, region);
-    XFixesDestroyRegion(canvas->display, region);
 }
 
 // GL2D QUIT: Clean up and release all X11 and memory resources
@@ -181,6 +128,7 @@ void gl2d_quit(FastCanvas *canvas) {
     }
 }
 
+// FAST PSET: Direct memory write with centralized bounds checking
 static inline void fast_pset(FastCanvas *canvas, int x, int y, unsigned long color) {
     if (x >= 0 && x < canvas->width && y >= 0 && y < canvas->height) {
         uint8_t *pixel_addr = canvas->data + (y * canvas->stride) + (x * canvas->bpp);
@@ -188,6 +136,7 @@ static inline void fast_pset(FastCanvas *canvas, int x, int y, unsigned long col
     }
 }
 
+// FAST PGET: Direct memory read with bounds checking
 static inline unsigned long fast_pget(FastCanvas *canvas, int x, int y) {
     if (x >= 0 && x < canvas->width && y >= 0 && y < canvas->height) {
         uint8_t *pixel_addr = canvas->data + (y * canvas->stride) + (x * canvas->bpp);
@@ -196,6 +145,7 @@ static inline unsigned long fast_pget(FastCanvas *canvas, int x, int y) {
     return 0;
 }
 
+// FAST CLS: Clear the entire canvas with a specific color
 static inline void fast_cls(FastCanvas *canvas, unsigned long color) {
     uint32_t *buffer = (uint32_t *)canvas->data;
     int total_pixels = canvas->width * canvas->height;
@@ -204,6 +154,7 @@ static inline void fast_cls(FastCanvas *canvas, unsigned long color) {
     }
 }
 
+// FAST LINE: Draw a line using Bresenham's algorithm with fast_pset
 static inline void fast_line(FastCanvas *canvas, int x0, int y0, int x1, int y1, unsigned long color) {
     int dx = abs(x1 - x0);
     int dy = abs(y1 - y0);
@@ -226,15 +177,17 @@ static inline void fast_line(FastCanvas *canvas, int x0, int y0, int x1, int y1,
     }
 }
 
+// FAST RECT: Draw an outlined rectangle
 static inline void fast_rect(FastCanvas *canvas, int x, int y, int w, int h, unsigned long color) {
     int x1 = x + w - 1;
     int y1 = y + h - 1;
-    fast_line(canvas, x, y, x1, y, color);       
-    fast_line(canvas, x, y1, x1, y1, color);    
-    fast_line(canvas, x, y, x, y1, color);       
-    fast_line(canvas, x1, y, x1, y1, color);    
+    fast_line(canvas, x, y, x1, y, color);       // Top
+    fast_line(canvas, x, y1, x1, y1, color);    // Bottom
+    fast_line(canvas, x, y, x, y1, color);       // Left
+    fast_line(canvas, x1, y, x1, y1, color);    // Right
 }
 
+// FAST FILLED RECT: Draw a solid filled rectangle
 static inline void fast_filled_rect(FastCanvas *canvas, int x, int y, int w, int h, unsigned long color) {
     int x_end = x + w;
     int y_end = y + h;
@@ -246,6 +199,7 @@ static inline void fast_filled_rect(FastCanvas *canvas, int x, int y, int w, int
     }
 }
 
+// Helper macro for plotting all 8 symmetric circle octants safely via fast_pset
 #define PLOT_OCTANTS(canvas, cx, cy, px, py, col) \
     do { \
         fast_pset(canvas, (cx)+(px), (cy)+(py), col); \
@@ -258,6 +212,7 @@ static inline void fast_filled_rect(FastCanvas *canvas, int x, int y, int w, int
         fast_pset(canvas, (cx)-(py), (cy)-(px), col); \
     } while(0)
 
+// FAST CIRCLE: Draw an outlined circle using midpoint circle algorithm
 static inline void fast_circle(FastCanvas *canvas, int xc, int yc, int r, unsigned long color) {
     int x = 0;
     int y = r;
@@ -277,6 +232,7 @@ static inline void fast_circle(FastCanvas *canvas, int xc, int yc, int r, unsign
     }
 }
 
+// FAST FILLED CIRCLE: Draw a solid filled circle
 static inline void fast_filled_circle(FastCanvas *canvas, int xc, int yc, int r, unsigned long color) {
     int r2 = r * r;
     for (int y = yc - r; y <= yc + r; y++) {
@@ -288,16 +244,6 @@ static inline void fast_filled_circle(FastCanvas *canvas, int xc, int yc, int r,
             }
         }
     }
-}
-
-static inline int gl2d_inrect(int px, int py, int rx, int ry, int rw, int rh) {
-    return (px >= rx && px <= rx + rw && py >= ry && py <= ry + rh);
-}
-
-static inline int gl2d_incirc(int px, int py, int cx, int cy, int r) {
-    int dx = px - cx;
-    int dy = py - cy;
-    return (dx * dx + dy * dy <= r * r);
 }
 
 #endif // GL2D_IMPLEMENTATION
