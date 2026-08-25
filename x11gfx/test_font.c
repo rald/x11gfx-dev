@@ -71,8 +71,8 @@ time_t rawtime;
         my_strupr(buffer);
 
         dtext(&canvas,buffer,
-            canvas.width-strlen(buffer)*4*2,
-            0,0x40FFFFFF,2
+            canvas.width-strlen(buffer)*4*4,
+            0,0x40FFFFFF,4
         );
 
         gl2d_update(&canvas);
