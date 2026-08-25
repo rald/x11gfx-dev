@@ -192,30 +192,7 @@ void gl2d_quit(FastCanvas *canvas) {
 static inline void pset(FastCanvas *canvas, int x, int y, unsigned long color) {
     if (x >= 0 && x < canvas->width && y >= 0 && y < canvas->height) {
         uint8_t *pixel_addr = canvas->data + (y * canvas->stride) + (x * canvas->bpp);
-        
-        uint32_t alpha = (color >> 24) & 0xFF;
-        
-        if (alpha == 0) return;
-
-        uint32_t dest_pixel = *(uint32_t *)pixel_addr;
-        
-        // Extract background components
-        uint32_t dr = (dest_pixel >> 16) & 0xFF;
-        uint32_t dg = (dest_pixel >> 8) & 0xFF;
-        uint32_t db = dest_pixel & 0xFF;
-
-        // Extract source components
-        uint32_t sr = (color >> 16) & 0xFF;
-        uint32_t sg = (color >> 8) & 0xFF;
-        uint32_t sb = color & 0xFF;
-
-        // Premultiplied alpha blending formula
-        uint32_t out_r = (sr * alpha + dr * (255 - alpha)) / 255;
-        uint32_t out_g = (sg * alpha + dg * (255 - alpha)) / 255;
-        uint32_t out_b = (sb * alpha + db * (255 - alpha)) / 255;
-        uint32_t out_a = alpha; 
-
-        *(uint32_t *)pixel_addr = (out_a << 24) | (out_r << 16) | (out_g << 8) | out_b;
+        *(uint32_t *)pixel_addr = (uint32_t)color;
     }
 }
 
