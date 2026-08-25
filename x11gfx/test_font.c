@@ -66,7 +66,7 @@ time_t rawtime;
 
         time(&rawtime);
         info = localtime(&rawtime);
-        strftime(buffer, sizeof(buffer), "%A %m-%d-%Y %l:%M:%S %p", info);
+        strftime(buffer, sizeof(buffer), "%A, %B %d, %Y %l:%M:%S %p", info);
 
         my_strupr(buffer);
 

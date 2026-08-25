@@ -1,10 +1,11 @@
 .PHONY: all clean
 
-all: game
+all: test_font
 
-game: main.c
-	gcc main.c -o game -I. -L. -lX11 -lXext -lXfixes -lm -O3
+test_font: test_font.c
+	gcc test_font.c -o test_font -I. -L. -lX11 -lXext -lXfixes -lm -O3
 
 clean:
-	rm game
+	rm test_font
+
 
