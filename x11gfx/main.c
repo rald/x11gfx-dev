@@ -43,7 +43,7 @@ int main() {
             }
         } else {
             rect_clicked = 0;
-            circle_clicked = 0;          
+            circle_clicked = 0;
         }
 
         fast_cls(&canvas, 0x00000000);
