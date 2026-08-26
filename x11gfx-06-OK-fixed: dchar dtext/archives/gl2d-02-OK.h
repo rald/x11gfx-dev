@@ -43,10 +43,10 @@ void gl2d_set_input_regions(FastCanvas *canvas, XRectangle *rects, int nrects, i
 static inline void pset(FastCanvas *canvas, int x, int y, unsigned long color);
 static inline unsigned long pget(FastCanvas *canvas, int x, int y);
 static inline void cls(FastCanvas *canvas, unsigned long color);
-static inline void dline(FastCanvas *canvas, int x0, int y0, int x1, int y1, unsigned long color);
-static inline void drect(FastCanvas *canvas, int x, int y, int w, int h, unsigned long color);
+static inline void line(FastCanvas *canvas, int x0, int y0, int x1, int y1, unsigned long color);
+static inline void rect(FastCanvas *canvas, int x, int y, int w, int h, unsigned long color);
 static inline void frect(FastCanvas *canvas, int x, int y, int w, int h, unsigned long color);
-static inline void dcirc(FastCanvas *canvas, int xc, int yc, int r, unsigned long color);
+static inline void circ(FastCanvas *canvas, int xc, int yc, int r, unsigned long color);
 static inline void fcirc(FastCanvas *canvas, int xc, int yc, int r, unsigned long color);
 
 // Collision Helper Prototypes
@@ -192,30 +192,7 @@ void gl2d_quit(FastCanvas *canvas) {
 static inline void pset(FastCanvas *canvas, int x, int y, unsigned long color) {
     if (x >= 0 && x < canvas->width && y >= 0 && y < canvas->height) {
         uint8_t *pixel_addr = canvas->data + (y * canvas->stride) + (x * canvas->bpp);
-        
-        uint32_t alpha = (color >> 24) & 0xFF;
-        
-        if (alpha == 0) return;
-
-        uint32_t dest_pixel = *(uint32_t *)pixel_addr;
-        
-        // Extract background components
-        uint32_t dr = (dest_pixel >> 16) & 0xFF;
-        uint32_t dg = (dest_pixel >> 8) & 0xFF;
-        uint32_t db = dest_pixel & 0xFF;
-
-        // Extract source components
-        uint32_t sr = (color >> 16) & 0xFF;
-        uint32_t sg = (color >> 8) & 0xFF;
-        uint32_t sb = color & 0xFF;
-
-        // Premultiplied alpha blending formula
-        uint32_t out_r = (sr * alpha + dr * (255 - alpha)) / 255;
-        uint32_t out_g = (sg * alpha + dg * (255 - alpha)) / 255;
-        uint32_t out_b = (sb * alpha + db * (255 - alpha)) / 255;
-        uint32_t out_a = alpha; 
-
-        *(uint32_t *)pixel_addr = (out_a << 24) | (out_r << 16) | (out_g << 8) | out_b;
+        *(uint32_t *)pixel_addr = (uint32_t)color;
     }
 }
 
@@ -235,7 +212,7 @@ static inline void cls(FastCanvas *canvas, unsigned long color) {
     }
 }
 
-static inline void dline(FastCanvas *canvas, int x0, int y0, int x1, int y1, unsigned long color) {
+static inline void line(FastCanvas *canvas, int x0, int y0, int x1, int y1, unsigned long color) {
     int dx = abs(x1 - x0);
     int dy = abs(y1 - y0);
     int sx = (x0 < x1) ? 1 : -1;
@@ -257,28 +234,16 @@ static inline void dline(FastCanvas *canvas, int x0, int y0, int x1, int y1, uns
     }
 }
 
-static inline void drect(FastCanvas *canvas, int x, int y, int w, int h, unsigned long color) {
-    if (w <= 0 || h <= 0) return;
-    
+static inline void rect(FastCanvas *canvas, int x, int y, int w, int h, unsigned long color) {
     int x1 = x + w - 1;
     int y1 = y + h - 1;
-
-    // Draw top and bottom edges using horizontal spans
-    for (int cx = x; cx <= x1; cx++) {
-        pset(canvas, cx, y, color);
-        pset(canvas, cx, y1, color);
-    }
-
-    // Draw left and right edges using vertical spans (excluding corners already drawn)
-    for (int cy = y + 1; cy < y1; cy++) {
-        pset(canvas, x, cy, color);
-        pset(canvas, x1, cy, color);
-    }
+    line(canvas, x, y, x1, y, color);       
+    line(canvas, x, y1, x1, y1, color);    
+    line(canvas, x, y, x, y1, color);       
+    line(canvas, x1, y, x1, y1, color);    
 }
 
 static inline void frect(FastCanvas *canvas, int x, int y, int w, int h, unsigned long color) {
-    if (w <= 0 || h <= 0) return;
-
     int x_end = x + w;
     int y_end = y + h;
     
@@ -301,7 +266,7 @@ static inline void frect(FastCanvas *canvas, int x, int y, int w, int h, unsigne
         pset(canvas, (cx)-(py), (cy)-(px), col); \
     } while(0)
 
-static inline void dcirc(FastCanvas *canvas, int xc, int yc, int r, unsigned long color) {
+static inline void circ(FastCanvas *canvas, int xc, int yc, int r, unsigned long color) {
     int x = 0;
     int y = r;
     int d = 3 - 2 * r;
