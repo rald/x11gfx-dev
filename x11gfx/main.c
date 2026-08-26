@@ -156,7 +156,7 @@ int main() {
         gl3d_draw_cube(&canvas, &cube, 1.0f);
 
         // Render instruction text overlay[cite: 1]
-        gl2d_draw_text(&canvas, "CLICK AND DRAG CUBE TO SPIN\r\nUSE (X) TO CLOSE APP", gui_x + 15, gui_y + 15, 3, 5, 0xFFFFFFFF, 2);
+        gl2d_draw_text(&canvas, "CLICK AND DRAG CUBE TO SPIN\r\nUSE [X] TO CLOSE APP", gui_x + 15, gui_y + 15, 3, 5, 0xFFFFFFFF, 2);
 
         gl2d_update(&canvas);
         usleep(16000); // ~60 FPS[cite: 1]
