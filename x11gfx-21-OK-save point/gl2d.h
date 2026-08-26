@@ -32,16 +32,11 @@ typedef struct {
     int middle_button;
 } MouseState;
 
-// Keyboard State Tracker (Supports simultaneous keypresses via keycodes)
-typedef struct {
-    uint8_t keys[256]; 
-} KeyState;
-
 // Function Prototypes
 int gl2d_init(FastCanvas *canvas);
 void gl2d_update(FastCanvas *canvas);
 void gl2d_quit(FastCanvas *canvas);
-int gl2d_poll_events(FastCanvas *canvas, MouseState *mouse, KeyState *keyboard);
+int gl2d_poll_events(FastCanvas *canvas, MouseState *mouse);
 void gl2d_set_input_region(FastCanvas *canvas, int x, int y, int w, int h, int enabled);
 void gl2d_set_input_regions(FastCanvas *canvas, XRectangle *rects, int nrects, int enabled);
 
@@ -85,8 +80,7 @@ int gl2d_init(FastCanvas *canvas) {
     attrs.background_pixel = 0; 
     attrs.border_pixel = 0;
     attrs.override_redirect = True; 
-    attrs.event_mask = PointerMotionMask | ButtonPressMask | ButtonReleaseMask | 
-                       KeyPressMask | KeyReleaseMask | ExposureMask | StructureNotifyMask | FocusChangeMask;
+    attrs.event_mask = PointerMotionMask | ButtonPressMask | ButtonReleaseMask | ExposureMask | StructureNotifyMask;
 
     canvas->win = XCreateWindow(
         canvas->display, root, 
@@ -95,8 +89,9 @@ int gl2d_init(FastCanvas *canvas) {
         CWColormap | CWBackPixel | CWBorderPixel | CWOverrideRedirect | CWEventMask, &attrs
     );
 
-    XRectangle rect = {0, 0, canvas->width, canvas->height};
-    XserverRegion region = XFixesCreateRegion(canvas->display, &rect, 1);
+    // Default: Make the window click-through so background windows/desktop work normally
+    XRectangle rect = {0, 0, 0, 0};
+    XserverRegion region = XFixesCreateRegion(canvas->display, &rect, 0);
     XFixesSetWindowShapeRegion(canvas->display, canvas->win, ShapeInput, 0, 0, region);
     XFixesDestroyRegion(canvas->display, region);
 
@@ -137,8 +132,8 @@ void gl2d_update(FastCanvas *canvas) {
     XFlush(canvas->display);
 }
 
-// GL2D POLL EVENTS: Non-blocking event loop handler for mouse, window, and simultaneous keys
-int gl2d_poll_events(FastCanvas *canvas, MouseState *mouse, KeyState *keyboard) {
+// GL2D POLL EVENTS: Non-blocking event loop handler for mouse movement and clicks
+int gl2d_poll_events(FastCanvas *canvas, MouseState *mouse) {
     XEvent event;
     while (XPending(canvas->display) > 0) {
         XNextEvent(canvas->display, &event);
@@ -157,33 +152,19 @@ int gl2d_poll_events(FastCanvas *canvas, MouseState *mouse, KeyState *keyboard) 
                 if (event.xbutton.button == Button2) mouse->middle_button = 0;
                 if (event.xbutton.button == Button3) mouse->right_button = 0;
                 break;
-            case KeyPress:
-                if (event.xkey.keycode < 256) {
-                    keyboard->keys[event.xkey.keycode] = 1;
-                }
-                break;
-            case KeyRelease:
-                if (XPending(canvas->display) > 0) {
-                    XEvent next_event;
-                    XPeekEvent(canvas->display, &next_event);
-                    if (next_event.type == KeyPress && next_event.xkey.keycode == event.xkey.keycode && next_event.xkey.time == event.xkey.time) {
-                        break; 
-                    }
-                }
-                if (event.xkey.keycode < 256) {
-                    keyboard->keys[event.xkey.keycode] = 0;
-                }
-                break;
         }
     }
     return 1;
 }
 
-// GL2D SET INPUT REGION
+// GL2D SET INPUT REGION: Selectively enable/disable input catching for background click-through
 void gl2d_set_input_region(FastCanvas *canvas, int x, int y, int w, int h, int enabled) {
     XRectangle rect;
     if (enabled) {
-        rect.x = x; rect.y = y; rect.width = w; rect.height = h;
+        rect.x = x;
+        rect.y = y;
+        rect.width = w;
+        rect.height = h;
     } else {
         rect.x = 0; rect.y = 0; rect.width = 0; rect.height = 0;
     }
@@ -192,14 +173,14 @@ void gl2d_set_input_region(FastCanvas *canvas, int x, int y, int w, int h, int e
     XFixesDestroyRegion(canvas->display, region);
 }
 
-// GL2D SET INPUT REGIONS
+// GL2D SET INPUT REGIONS: Support multiple interactive XRectangles simultaneously
 void gl2d_set_input_regions(FastCanvas *canvas, XRectangle *rects, int nrects, int enabled) {
     XserverRegion region = XFixesCreateRegion(canvas->display, rects, enabled ? nrects : 0);
     XFixesSetWindowShapeRegion(canvas->display, canvas->win, ShapeInput, 0, 0, region);
     XFixesDestroyRegion(canvas->display, region);
 }
 
-// GL2D QUIT
+// GL2D QUIT: Clean up and release all X11 and memory resources
 void gl2d_quit(FastCanvas *canvas) {
     if (canvas->display) {
         if (canvas->gc) XFreeGC(canvas->display, canvas->gc);
@@ -211,18 +192,24 @@ void gl2d_quit(FastCanvas *canvas) {
 static inline void gl2d_pset(FastCanvas *canvas, int x, int y, unsigned long color) {
     if (x >= 0 && x < canvas->width && y >= 0 && y < canvas->height) {
         uint8_t *pixel_addr = canvas->data + (y * canvas->stride) + (x * canvas->bpp);
+        
         uint32_t alpha = (color >> 24) & 0xFF;
+        
         if (alpha == 0) return;
 
         uint32_t dest_pixel = *(uint32_t *)pixel_addr;
+        
+        // Extract background components
         uint32_t dr = (dest_pixel >> 16) & 0xFF;
         uint32_t dg = (dest_pixel >> 8) & 0xFF;
         uint32_t db = dest_pixel & 0xFF;
 
+        // Extract source components
         uint32_t sr = (color >> 16) & 0xFF;
         uint32_t sg = (color >> 8) & 0xFF;
         uint32_t sb = color & 0xFF;
 
+        // Premultiplied alpha blending formula
         uint32_t out_r = (sr * alpha + dr * (255 - alpha)) / 255;
         uint32_t out_g = (sg * alpha + dg * (255 - alpha)) / 255;
         uint32_t out_b = (sb * alpha + db * (255 - alpha)) / 255;
@@ -272,13 +259,17 @@ static inline void gl2d_draw_line(FastCanvas *canvas, int x0, int y0, int x1, in
 
 static inline void gl2d_draw_rect(FastCanvas *canvas, int x, int y, int w, int h, unsigned long color) {
     if (w <= 0 || h <= 0) return;
+    
     int x1 = x + w - 1;
     int y1 = y + h - 1;
 
+    // Draw top and bottom edges using horizontal spans
     for (int cx = x; cx <= x1; cx++) {
         gl2d_pset(canvas, cx, y, color);
         gl2d_pset(canvas, cx, y1, color);
     }
+
+    // Draw left and right edges using vertical spans (excluding corners already drawn)
     for (int cy = y + 1; cy < y1; cy++) {
         gl2d_pset(canvas, x, cy, color);
         gl2d_pset(canvas, x1, cy, color);
@@ -287,8 +278,10 @@ static inline void gl2d_draw_rect(FastCanvas *canvas, int x, int y, int w, int h
 
 static inline void gl2d_fill_rect(FastCanvas *canvas, int x, int y, int w, int h, unsigned long color) {
     if (w <= 0 || h <= 0) return;
+
     int x_end = x + w;
     int y_end = y + h;
+    
     for (int cy = y; cy < y_end; cy++) {
         for (int cx = x; cx < x_end; cx++) {
             gl2d_pset(canvas, cx, cy, color);
@@ -312,7 +305,9 @@ static inline void gl2d_draw_circle(FastCanvas *canvas, int xc, int yc, int r, u
     int x = 0;
     int y = r;
     int d = 3 - 2 * r;
+
     PLOT_OCTANTS(canvas, xc, yc, x, y, color);
+    
     while (y >= x) {
         x++;
         if (d > 0) {
@@ -349,4 +344,5 @@ static inline int gl2d_incirc(int px, int py, int cx, int cy, int r) {
 }
 
 #endif // GL2D_IMPLEMENTATION
+
 #endif // GL2D_H
