@@ -17,12 +17,12 @@ char *my_strupr(char *s) {
     return s;
 }
 
-void dchar(FastCanvas *fc,char ch,int x,int y,unsigned long  color,int size) {
+void dchar(FastCanvas *fc,char ch,int x,int y,int w,int h,unsigned long  color,int size) {
   for(int k=0;k<45;k++) {
     if(font[k][0]==ch) {
-      for(int j=0;j<5;j++) {
-        for(int i=0;i<3;i++) {
-          if(font[k][j*3+i+1]==1) {
+      for(int j=0;j<h;j++) {
+        for(int i=0;i<w;i++) {
+          if(font[k][j*w+i+1]==1) {
             frect(fc,i*size+x,j*size+y,size,size,color);
           }
         }
@@ -32,13 +32,13 @@ void dchar(FastCanvas *fc,char ch,int x,int y,unsigned long  color,int size) {
   }
 }
 
-void dtext(FastCanvas *fc,char *t,int x,int y,unsigned long color,int size) {
+void dtext(FastCanvas *fc,char *t,int x,int y,int w,int h,unsigned long color,int size) {
   for(int k=0;t[k];k++) {
-    dchar(fc,t[k],x,y,color,size);
-    x+=4*size;
-    if(x+4*size>fc->width) {
+    dchar(fc,t[k],x,y,w,h,color,size);
+    x+=(w+1)*size;
+    if(x+(w+1)*size>fc->width) {
       x=0;
-      y+=6*size;
+      y+=(h+1)*size;
     }
   }
 }
@@ -71,8 +71,8 @@ time_t rawtime;
         my_strupr(buffer);
 
         dtext(&canvas,buffer,
-            canvas.width-strlen(buffer)*4*4,
-            0,0x40FFFFFF,4
+            canvas.width-strlen(buffer)*4*4,0,
+            3,5,0x40FFFFFF,4
         );
 
         gl2d_update(&canvas);
